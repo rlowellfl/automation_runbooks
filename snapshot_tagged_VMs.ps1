@@ -2,6 +2,7 @@
 # All matching VMs have an Incremental disk snapshot created for all OS and Data disks.
 
 Param(
+ [Parameter (Mandatory = $true)]
  [string]$subscription,
  [string]$tagName = "Snapshot",
  [string]$tagValue = "True",
