@@ -6,7 +6,7 @@ Param(
  [string]$tagName = "Snapshot",
  [string]$tagValue = "True",
  [string]$storageType = "Standard_LRS",
- [string]$method = "SA"
+ [string]$managedIdentityType = "SA"
 )
 
 # Ensures you do not inherit an AzContext in your runbook
@@ -27,11 +27,11 @@ catch{
 $AzureContext = Set-AzContext -SubscriptionName $subscription `
     -DefaultProfile $AzureContext
 
-if ($method -eq "SA")
+if ($managedIdentityType -eq "SA")
     {
         Write-Output "Using system-assigned managed identity"
     }
-elseif ($method -eq "UA")
+elseif ($managedIdentityType -eq "UA")
     {
         Write-Output "Using user-assigned managed identity"
 
@@ -55,7 +55,7 @@ elseif ($method -eq "UA")
             }
     }
 else {
-        Write-Output "Invalid method. Choose UA or SA."
+        Write-Output "Invalid managed identity type. Choose UA or SA."
         exit
      }
 
