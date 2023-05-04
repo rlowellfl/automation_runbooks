@@ -1,5 +1,5 @@
 # The following PowerShell runbook queries all Azure Virtual Machines in a given subscription with a tag and value matching the parameters ('Snapshot' and 'True' by default).
-# All matching VMs have a Full disk snapshot created for all OS and Data disks.
+# All matching VMs have an Incremental disk snapshot created for all OS and Data disks.
 
 Param(
  [string]$subscription,
@@ -87,11 +87,11 @@ $timestamp = Get-Date -f MM-dd-yyyy_HH_mm_ss
  
 #Snapshot name of OS data disk
  
-$snapshotName = $vmInfo.Name + "-os-" + $timestamp
+$snapshotName = $vmInfo.Name + "-OsDisk-" + $timestamp
  
 #Create snapshot configuration
  
-$snapshot = New-AzSnapshotConfig -SourceUri $vmInfo.StorageProfile.OsDisk.ManagedDisk.Id -AccountType $storageType -Location $location -CreateOption copy
+$snapshot = New-AzSnapshotConfig -SourceUri $vmInfo.StorageProfile.OsDisk.ManagedDisk.Id -AccountType $storageType -Location $location -CreateOption copy -Incremental
 
 #Take snapshot
  
@@ -109,7 +109,7 @@ $snapshotName = $vmInfo.StorageProfile.DataDisks[$i].Name + $timestamp
 
 #Create snapshot configuration
  
-$snapshot = New-AzSnapshotConfig -SourceUri $vmInfo.StorageProfile.DataDisks[$i].ManagedDisk.Id -Location $location -CreateOption copy
+$snapshot = New-AzSnapshotConfig -SourceUri $vmInfo.StorageProfile.DataDisks[$i].ManagedDisk.Id -Location $location -CreateOption copy -Incremental
 
 #Take snapshot
  
