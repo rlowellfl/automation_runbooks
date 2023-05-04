@@ -1,8 +1,11 @@
+# The following PowerShell runbook queries all Azure Virtual Machines in a given subscription with a tag and value matching the parameters ('Snapshot' and 'True' by default).
+# All matching VMs have a Full disk snapshot created for all OS and Data disks.
+
 Param(
  [string]$subscription,
  [string]$tagName = "Snapshot",
  [string]$tagValue = "True",
- [string]$storageType = "StandardLRS",
+ [string]$storageType = "Standard_LRS",
  [string]$method = "SA"
 )
 
