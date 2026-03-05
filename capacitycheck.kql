@@ -1,0 +1,37 @@
+resources
+| where type =~ 'microsoft.compute/virtualmachines'
+| where isnull(properties.capacityReservation)
+| summarize _totalUncoveredVms = count() by 
+            location,
+            size = tolower(tostring(properties.hardwareProfile.vmSize)),
+            zone = tostring(zones[0]),
+            subscriptionId
+| join kind=leftouter (
+    resources
+    | where type =~ 'microsoft.compute/capacityreservationgroups/capacityreservations'
+    | summarize _totalCapacity = sum(toint(sku.capacity)),
+                _availCapacity = sum(toint(sku.capacity) - iff(isnull(properties.virtualMachinesAssociated), 0, array_length(properties.virtualMachinesAssociated)))
+                by location, size = tolower(tostring(sku.name)), zone = tostring(zones[0]), subscriptionId
+) on location, size, zone, subscriptionId
+| extend alert_noCapacity = iff(isnull(_totalCapacity) or _totalCapacity <= 0, true, false)
+| extend alert_overallocated = iff(isnull(_availCapacity), false, _availCapacity < 0)
+| extend alert_insufficient = _totalUncoveredVms > iff(isnull(_availCapacity), 0, _availCapacity)
+| where alert_noCapacity or alert_overallocated or alert_insufficient
+| join kind=inner (
+    resourcecontainers
+    | where type =~ 'microsoft.resources/subscriptions'
+    | project subscriptionId, subscriptionName = name
+) on subscriptionId
+| project capacityLocation = location,
+          capacityZone = iff(isempty(zone), 'no zone', zone),
+          capacitySku = size,
+          subscriptionName,
+          totalUncoveredVms = coalesce(_totalUncoveredVms, 0),
+          totalCapacity = coalesce(_totalCapacity, 0),
+          availCapacity = coalesce(_availCapacity, 0),
+          notes = strcat(
+                    iff(alert_noCapacity, '⚠️ No capacity reservation configured. Create a reservation group for this scope. ', '✅ Capacity configured. '),
+                    iff(alert_overallocated, strcat('⚠️ Capacity overallocated by ', abs(coalesce(_availCapacity, 0)), ' VMs. SLA not applicable. '), '✅ No overallocation. '),
+                    iff(alert_insufficient, strcat('⚠️ Insufficient capacity: ', coalesce(_totalUncoveredVms, 0), ' uncovered/', coalesce(_availCapacity, 0), ' available. Add more capacity or assign VMs. '), '✅ Sufficient capacity. ')
+                 )
+| order by capacityLocation, capacityZone, capacitySku
