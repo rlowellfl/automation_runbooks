@@ -1,0 +1,74 @@
+resources
+| where     type =~ 'microsoft.compute/virtualmachines'
+| where     tostring(location) in~ ( // Only include regions that have availability zones
+    "southafricanorth",
+    "eastasia",
+    "southeastasia",
+    "australiaeast",
+    "brazilsouth",
+    "canadacentral", 
+    "chinanorth3",
+    "northeurope",
+    "westeurope",
+    "francecentral",
+    "germanywestcentral",
+    "centralindia",
+    "israelcentral",
+    "italynorth",
+    "japaneast",
+    "koreacentral",
+    "norwayeast",
+    "polandcentral",
+    "qatarcentral",
+    "swedencentral",
+    "switzerlandnorth",
+    "uksouth",
+    "southcentralus",
+    "westus2",
+    "westus3",
+    "centralus",
+    "eastus",
+    "eastus2"
+)
+| where     name matches regex @'^[a-zA-Z0-9\-_\.]+\d+$'  // Only include VMs with names ending in one or more digits (e.g., web01, eu2-web-003)
+| extend    vmPrefix = tostring(extract(@'^([a-zA-Z0-9\-_\.]+?)\d+$', 1, name))  // Extract the resource name prefix (everything before the trailing digits)
+| extend    vmPrefix = trim_end(@'[-_\.]+', vmPrefix)  // Remove trailing special characters (hyphens, underscores, periods) for cleaner grouping
+| extend    vmPrefix = tolower(tostring(vmPrefix))  // Normalize to lowercase for case-insensitive grouping
+| extend    vmZone = tostring(zones[0])
+| summarize vmCount = count()
+            by vmPrefix, location, subscriptionId, vmZone
+| summarize totalVms = sum(vmCount),
+            totalZonalVms = sumif(vmCount, isnotempty(vmZone)),
+            totalRegionalVms = sumif(vmCount, isempty(vmZone)),
+            totalZone1Vms = sumif(vmCount, vmZone == "1"),
+            totalZone2Vms = sumif(vmCount, vmZone == "2"),
+            totalZone3Vms = sumif(vmCount, vmZone == "3"),
+            totalZones = countif(isnotempty(vmZone)),
+            minVmsPerZone = minif(vmCount, isnotempty(vmZone)),
+            maxVmsPerZone = maxif(vmCount, isnotempty(vmZone))
+            by vmPrefix, location, subscriptionId
+| extend    zoneDelta = (maxVmsPerZone - minVmsPerZone)
+| extend    alert_RegionalVms = (totalRegionalVms > 0)
+| extend    alert_NoZonalVms = (totalZonalVms == 0)
+| extend    alert_NotEnoughZones = (totalZonalVms > 1 and totalZones < 2)
+| extend    alert_UnevenZonalSpread = (
+              (totalZonalVms between (1 .. 19) and zoneDelta > 1) or
+              (totalZonalVms between (20 .. 39) and zoneDelta > 2) or
+              (totalZonalVms >= 40 and zoneDelta > (totalZonalVms * 0.2))
+            )
+| where     (alert_RegionalVms or alert_NotEnoughZones or alert_UnevenZonalSpread)
+| project   group_Prefix = vmPrefix,
+            group_Location = location,
+            group_SubscriptionId = subscriptionId,
+            group_Concerns = strcat(
+                iff(alert_RegionalVms, strcat("⚠️ ", totalRegionalVms, " regional VM(s) detected – no zone-level fault tolerance. Move to zones. "), ""), 
+                iff(alert_NotEnoughZones, "⚠️ Zonal VMs in <2 zones – vulnerable to zone outage. Spread across ≥2 (ideally 3). ", ""),
+                iff(alert_UnevenZonalSpread, "⚠️ Imabalanced - VMs are not evenly distributed across zones. Rebalance for better HA. ", "")
+            ),
+            group_TotalVms = totalVms,
+            group_RegionalVms = strcat(iff(alert_RegionalVms, "⚠️ ", ""), totalRegionalVms),
+            group_TotalZones = strcat(iff(alert_NotEnoughZones, "⚠️ ", ""), totalZones),
+            group_MaxVmZonalDelta = strcat(iff(alert_UnevenZonalSpread, "⚠️ ", ""), zoneDelta),
+            group_Zone1Vms = totalZone1Vms,
+            group_Zone2Vms = totalZone2Vms,
+            group_Zone3VMs = totalZone3Vms
