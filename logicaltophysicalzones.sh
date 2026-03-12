@@ -1,0 +1,1 @@
+az rest --method get --uri '/subscriptions/{subscriptionId}/locations?api-version=2022-12-01' --query "value[? (name=='centralus' || name=='eastus2')].{Region: displayName, Slug: name, Mappings: availabilityZoneMappings}"
